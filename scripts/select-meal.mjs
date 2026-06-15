@@ -1,7 +1,8 @@
+import { pathToFileURL } from 'node:url';
 import { launchBrowser, newAuthenticatedContext } from './lib/maczfit-client.mjs';
 import { MaczfitUiSession } from './lib/maczfit-ui-session.mjs';
 
-function parseArgs(argv) {
+export function parseArgs(argv) {
   const args = { apply: false };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
@@ -22,7 +23,7 @@ function parseArgs(argv) {
   return args;
 }
 
-function usage() {
+export function usage() {
   return [
     'Usage:',
     '  npm run select:meal -- --date YYYY-MM-DD --meal "Obiad" --dish "tagliatelle z wołowiną"',
@@ -52,7 +53,9 @@ async function main() {
   }
 }
 
-main().catch((error) => {
-  console.error(error.message);
-  process.exitCode = 1;
-});
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((error) => {
+    console.error(error.message);
+    process.exitCode = 1;
+  });
+}

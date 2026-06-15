@@ -1,11 +1,12 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { launchBrowser, newAuthenticatedContext } from './lib/maczfit-client.mjs';
 import { MaczfitUiSession } from './lib/maczfit-ui-session.mjs';
 
 const DEFAULT_DIR = 'output/selections';
 
-function parseArgs(argv) {
+export function parseArgs(argv) {
   const args = {
     apply: false,
     dir: DEFAULT_DIR,
@@ -31,7 +32,7 @@ function parseArgs(argv) {
   return args;
 }
 
-function usage() {
+export function usage() {
   return [
     'Usage:',
     '  npm run apply:selections',
@@ -44,11 +45,11 @@ function usage() {
   ].join('\n');
 }
 
-async function fileExists(filePath) {
+export async function fileExists(filePath) {
   return fs.access(filePath).then(() => true, () => false);
 }
 
-async function pendingFilesFromDir(dir) {
+export async function pendingFilesFromDir(dir) {
   if (!await fileExists(dir)) return [];
   const entries = await fs.readdir(dir, { withFileTypes: true });
   return entries
@@ -57,15 +58,15 @@ async function pendingFilesFromDir(dir) {
     .sort();
 }
 
-async function readJson(filePath) {
+export async function readJson(filePath) {
   return JSON.parse(await fs.readFile(filePath, 'utf8'));
 }
 
-async function writeJson(filePath, value) {
+export async function writeJson(filePath, value) {
   await fs.writeFile(filePath, `${JSON.stringify(value, null, 2)}\n`);
 }
 
-function extractChoices(plan) {
+export function extractChoices(plan) {
   const rawChoices = Array.isArray(plan.choices) ? plan.choices : plan.selections;
   if (!Array.isArray(rawChoices) || rawChoices.length === 0) {
     throw new Error('Selection file must contain a non-empty choices array.');
@@ -77,7 +78,7 @@ function extractChoices(plan) {
   }));
 }
 
-async function loadPendingPlans(files) {
+export async function loadPendingPlans(files) {
   const plans = [];
   for (const filePath of files) {
     const plan = await readJson(filePath);
@@ -161,8 +162,10 @@ async function main() {
   if (hadError) process.exitCode = 1;
 }
 
-main().catch((error) => {
-  console.error(error.message);
-  console.error(usage());
-  process.exitCode = 1;
-});
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((error) => {
+    console.error(error.message);
+    console.error(usage());
+    process.exitCode = 1;
+  });
+}

@@ -11,7 +11,7 @@ const MEAL_TYPE_IDS = new Map([
   ['kolacja', 5],
 ]);
 
-function normalizeText(value) {
+export function normalizeText(value) {
   return String(value || '')
     .toLocaleLowerCase('pl-PL')
     .normalize('NFD')
@@ -20,11 +20,11 @@ function normalizeText(value) {
     .trim();
 }
 
-function mealTypeIdFromName(name) {
+export function mealTypeIdFromName(name) {
   return MEAL_TYPE_IDS.get(normalizeText(name));
 }
 
-function dateParts(date) {
+export function dateParts(date) {
   const [year, month, day] = date.split('-').map(Number);
   if (!year || !month || !day) throw new Error(`Invalid date: ${date}`);
   return { year, month: month - 1, day };

@@ -11,7 +11,9 @@
     "fetch:day:api": "node scripts/fetch-day-api.mjs",
     "list:configurable-days": "node scripts/list-configurable-days.mjs",
     "select:day": "node scripts/select-day.mjs",
-    "select:meal": "node scripts/select-meal.mjs"
+    "select:meal": "node scripts/select-meal.mjs",
+    "test": "node --test",
+    "test:coverage": "node --test --experimental-test-coverage"
   },
   "dependencies": {
     "dotenv": "^16.4.7",
