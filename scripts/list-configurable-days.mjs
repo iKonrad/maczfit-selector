@@ -1,5 +1,5 @@
 import { launchBrowser, newAuthenticatedContext } from './lib/maczfit-client.mjs';
-import { MaczfitSession } from './lib/maczfit-session.mjs';
+import { MaczfitUiSession } from './lib/maczfit-ui-session.mjs';
 
 const includeConfigured = process.argv.includes('--all-configurable');
 
@@ -8,12 +8,9 @@ async function main() {
   try {
     const context = await newAuthenticatedContext(browser);
     const page = await context.newPage();
-    const session = new MaczfitSession(page);
+    const session = new MaczfitUiSession(page);
 
-    const dashboard = await session.loadDashboard();
-    const transactionId = dashboard.transaction?.Id;
-    if (!transactionId) throw new Error('Could not read active transaction id from the orders page.');
-
+    const transactionId = await session.openActiveTransactionPage();
     const calendarDays = await session.getCalendarDays();
     const dates = includeConfigured ? await session.getConfigurableDays() : await session.getConfigurableUnconfiguredDays();
 

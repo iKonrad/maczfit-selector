@@ -1,0 +1,7 @@
+interface:
+  display_name: "Maczfit Choose"
+  short_description: "Plan and apply Maczfit meal choices from preferences."
+  default_prompt: "Use $maczfit-choose to choose meals for all unconfigured Maczfit days from my saved preferences and apply the pending selection files."
+
+policy:
+  allow_implicit_invocation: false

@@ -1,0 +1,7 @@
+interface:
+  display_name: "Maczfit Preferences"
+  short_description: "Interview the user and save Maczfit meal preferences."
+  default_prompt: "Use $maczfit-preferences to interview me about meal preferences and save them to output/preferences.json."
+
+policy:
+  allow_implicit_invocation: false

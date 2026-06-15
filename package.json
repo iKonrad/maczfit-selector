@@ -4,10 +4,13 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "apply:selections": "node scripts/apply-selection-files.mjs",
     "discover": "node scripts/discover.mjs",
-    "probe:menu": "node scripts/probe-menu.mjs",
+    "probe:menu:api": "node scripts/probe-menu.mjs",
     "fetch:day": "node scripts/fetch-day.mjs",
+    "fetch:day:api": "node scripts/fetch-day-api.mjs",
     "list:configurable-days": "node scripts/list-configurable-days.mjs",
+    "select:day": "node scripts/select-day.mjs",
     "select:meal": "node scripts/select-meal.mjs"
   },
   "dependencies": {

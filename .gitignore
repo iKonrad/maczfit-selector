@@ -1,5 +1,6 @@
 .env
 .auth/
-output/
+output/*
 node_modules/
 .playwright-cli/
+!data/preferences.example.json
