@@ -1,0 +1,17 @@
+{
+  "name": "maczfit-selector",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "discover": "node scripts/discover.mjs",
+    "probe:menu": "node scripts/probe-menu.mjs",
+    "fetch:day": "node scripts/fetch-day.mjs",
+    "list:configurable-days": "node scripts/list-configurable-days.mjs",
+    "select:meal": "node scripts/select-meal.mjs"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "playwright": "^1.61.0"
+  }
+}
