@@ -38,11 +38,11 @@ export class MaczfitUiSession {
 
   async openActiveTransactionPage() {
     await gotoOrders(this.page);
-    let href = await this.activeTransactionHref();
+    let href = await this.waitForActiveTransactionHref();
     if (!href && await this.isLoginPage()) {
       await loginAndSaveState(this.page);
       await gotoOrders(this.page);
-      href = await this.activeTransactionHref();
+      href = await this.waitForActiveTransactionHref();
     }
 
     const match = href?.match(/\/moje-konto\/zamowienia\/(\d+)/);
@@ -52,8 +52,23 @@ export class MaczfitUiSession {
     }
     this.transactionId = match[1];
     await gotoTransactionOrders(this.page, this.transactionId);
+    try {
+      await this.waitForCalendar({ timeout: 12000, saveArtifact: false });
+    } catch {
+      await this.openMenuEditorFromOverview();
+    }
     await this.waitForCalendar();
     return this.transactionId;
+  }
+
+  async waitForActiveTransactionHref() {
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const href = await this.activeTransactionHref();
+      if (href) return href;
+      await this.page.waitForTimeout(10000);
+      if (attempt < 2) await gotoOrders(this.page);
+    }
+    return null;
   }
 
   async activeTransactionHref() {
@@ -69,12 +84,29 @@ export class MaczfitUiSession {
     return this.page.locator('input[type="password"]').first().isVisible({ timeout: 1000 }).catch(() => false);
   }
 
-  async waitForCalendar() {
+  async waitForCalendar({ timeout = 30000, saveArtifact = true } = {}) {
     try {
-      await this.page.locator('.datepicker--cell-day.diet-order-calendar[data-date][data-month][data-year]').first().waitFor({ timeout: 30000 });
+      await this.page.locator('.datepicker--cell-day.diet-order-calendar[data-date][data-month][data-year]').first().waitFor({ timeout });
     } catch (error) {
-      await saveMaskedPageArtifact(this.page, OUTPUT_DIR, 'calendar-not-found');
+      if (saveArtifact) await saveMaskedPageArtifact(this.page, OUTPUT_DIR, 'calendar-not-found');
       throw new Error(`Calendar did not render. Current URL: ${this.page.url()}. ${error.message}`);
+    }
+  }
+
+  async openMenuEditorFromOverview() {
+    const consent = this.page.locator('.orders-agreemens-js .button--accepted:visible').first();
+    if (await consent.isVisible().catch(() => false)) {
+      await consent.click().catch(() => {});
+      await this.page.waitForTimeout(800);
+    }
+
+    const editButton = this.page
+      .locator('button.control-buttons-edit-diet:visible, .eab__action--edit-diet:visible')
+      .first();
+    if (await editButton.isVisible().catch(() => false)) {
+      await editButton.click();
+      await this.page.waitForLoadState('networkidle', { timeout: 30000 }).catch(() => {});
+      await this.page.waitForTimeout(1200);
     }
   }
 
@@ -92,6 +124,7 @@ export class MaczfitUiSession {
   }
 
   async openDay(date) {
+    await this.closeMealDialogIfOpen();
     const { year, month, day } = dateParts(date);
     const dayCell = this.page.locator(
       `.datepicker--cell-day.diet-order-calendar[data-date="${day}"][data-month="${month}"][data-year="${year}"]`
