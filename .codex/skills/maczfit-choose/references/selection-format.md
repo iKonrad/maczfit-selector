@@ -46,6 +46,9 @@ Write one file per day:
 - `applied`: successfully applied to the Maczfit website by `npm run apply:selections -- --apply`.
 - `failed`: apply script attempted the file and failed; it can be retried because the script processes any status other than `applied`.
 
+The apply script re-reads live state before writing, so an already-correct meal
+records `{"skipped": true, "reason": "already-selected"}` and costs no request.
+
 The apply script adds:
 
 ```json
@@ -64,11 +67,20 @@ On failure it adds:
 }
 ```
 
+## Option Ids
+
+`optionId` is the option's `id` from the day menu, which is the API's
+`dietCaloriesMealId`. This is the only id the switch endpoint accepts; the
+option also carries a `menuMealId`, which must never be used for writes. Ids are
+scoped per meal type and are reused across days, so always validate an id
+against the same `mealTypeId` in the same day file.
+
 ## Validation Rules
 
 - `date` must match the filename date.
 - `choices` must include exactly one option for each enabled/changeable meal from the menu.
 - Each `optionId` must exist in `menuFile` under the same `mealTypeId`.
+- Compare dish names with whitespace normalised; the data contains zero-width spaces.
 - Do not include disabled meals such as Podwieczorek when they are absent from the menu JSON.
 - Rationales should be short and useful, not a long chain-of-thought transcript.
 - Hard exclusions from preferences must appear in `rejected` if any matching option was available.

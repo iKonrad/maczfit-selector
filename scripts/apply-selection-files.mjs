@@ -1,8 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { launchBrowser, newAuthenticatedContext } from './lib/maczfit-client.mjs';
-import { MaczfitUiSession } from './lib/maczfit-ui-session.mjs';
+import { isModifiable, mealTypeIdFromName, openSession } from './lib/maczfit-api-client.mjs';
 
 const DEFAULT_DIR = 'output/selections';
 
@@ -119,45 +118,76 @@ async function main() {
     return;
   }
 
-  const browser = await launchBrowser();
+  const { api, orderId } = await openSession();
+  const deliveries = await api.upcomingDeliveries(orderId);
+  const byDate = new Map(deliveries.map((d) => [d.deliveryDate, d]));
   let hadError = false;
-  try {
-    const context = await newAuthenticatedContext(browser);
-    const page = await context.newPage();
-    const session = new MaczfitUiSession(page);
-    await session.openActiveTransactionPage();
 
-    for (const { filePath, plan } of pendingPlans) {
-      try {
-        if (!plan.date) throw new Error('Selection file is missing date.');
-        const choices = extractChoices(plan);
-        const applyResult = await session.selectDayOptions({
-          date: plan.date,
-          choices,
-          apply: true,
-          delayMs: args.delayMs,
-        });
-
-        plan.status = 'applied';
-        plan.appliedAt = new Date().toISOString();
-        plan.applyResult = applyResult;
-        delete plan.failedAt;
-        delete plan.error;
-        await writeJson(filePath, plan);
-        console.log(`Applied ${plan.date} from ${filePath}`);
-      } catch (error) {
-        hadError = true;
-        await session.closeMealDialogIfOpen().catch(() => {});
-        plan.status = 'failed';
-        plan.failedAt = new Date().toISOString();
-        plan.error = error.message;
-        await writeJson(filePath, plan).catch(() => {});
-        console.error(`Failed ${filePath}: ${error.message}`);
+  for (const { filePath, plan } of pendingPlans) {
+    try {
+      if (!plan.date) throw new Error('Selection file is missing date.');
+      const choices = extractChoices(plan);
+      const delivery = byDate.get(plan.date);
+      if (!delivery) throw new Error(`No delivery found for ${plan.date}.`);
+      if (!isModifiable(delivery.modificationTimeRemaining)) {
+        throw new Error(`${plan.date} is no longer modifiable (remaining ${delivery.modificationTimeRemaining}).`);
       }
+
+      // Read live state so an already-correct meal costs no write.
+      const menu = await api.deliveryMenu(delivery.deliveryId);
+      const current = new Map();
+      for (const meal of menu.deliveryMenuMeal || []) {
+        const mealTypeId = mealTypeIdFromName(meal.mealName);
+        if (mealTypeId) current.set(mealTypeId, meal);
+      }
+
+      const results = [];
+      for (const choice of choices) {
+        const meal = current.get(choice.mealTypeId);
+        if (!meal) throw new Error(`Meal type ${choice.mealTypeId} not present on ${plan.date}.`);
+        if (!meal.switchable) throw new Error(`Meal type ${choice.mealTypeId} is not switchable on ${plan.date}.`);
+
+        const alreadySelected = meal.dietCaloriesMealId === choice.optionId;
+        const result = {
+          date: plan.date,
+          mealTypeId: choice.mealTypeId,
+          mealTypeName: meal.mealName,
+          currentDishName: meal.menuMealName,
+          selectedOption: { id: choice.optionId },
+          alreadySelected,
+          result: alreadySelected ? { skipped: true, reason: 'already-selected' } : null,
+        };
+
+        if (!alreadySelected) {
+          await api.changeMeal({
+            orderId,
+            deliveryId: delivery.deliveryId,
+            deliveryMealId: meal.deliveryMealId,
+            dietCaloriesMealId: choice.optionId,
+          });
+          result.result = { changed: true };
+        }
+        results.push(result);
+      }
+
+      plan.status = 'applied';
+      plan.appliedAt = new Date().toISOString();
+      plan.applyResult = { apply: true, date: plan.date, source: 'api', choices: results };
+      delete plan.failedAt;
+      delete plan.error;
+      await writeJson(filePath, plan);
+      console.log(`Applied ${plan.date} from ${filePath}`);
+    } catch (error) {
+      hadError = true;
+      plan.status = 'failed';
+      plan.failedAt = new Date().toISOString();
+      plan.error = error.message;
+      await writeJson(filePath, plan).catch(() => {});
+      console.error(`Failed ${filePath}: ${error.message}`);
     }
-  } finally {
-    await browser.close();
   }
+
+  console.log(`Total API requests: ${api.requestCount}`);
 
   if (hadError) process.exitCode = 1;
 }

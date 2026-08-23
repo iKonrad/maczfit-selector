@@ -1,13 +1,24 @@
 ---
 name: maczfit-choose
-description: Choose Maczfit meals for all unconfigured configurable days using output/preferences.json, UI-only menu fetches, subagent-assisted day classification, saved selection-plan JSON files, and the apply:selections script. Use only when explicitly invoked with $maczfit-choose or when the user asks Codex to choose/apply Maczfit meals from preferences.
+description: Choose Maczfit meals for all unconfigured configurable days using output/preferences.json, Maczfit JSON API menu fetches, subagent-assisted day classification, saved selection-plan JSON files, and the apply:selections script. Use only when explicitly invoked with $maczfit-choose or when the user asks Codex to choose/apply Maczfit meals from preferences.
 ---
 
 # Maczfit Choose
 
 Use this skill to plan and optionally apply Maczfit meal selections.
 
-This workflow is UI-only for Maczfit interaction. Do not use `*:api` scripts.
+This workflow talks to the Maczfit JSON API (`/api/web/v1`) via `scripts/lib/maczfit-api-client.mjs`.
+
+Maczfit rebuilt their site in August 2026 and every old UI selector broke, so the
+browser-scraping path was retired on 2026-08-24. The API is also far cheaper: a
+full 3-day run costs roughly 45 requests versus ~340 API calls plus several
+hundred static assets through the browser. The client reuses one login and
+throttles requests (`MACZFIT_REQUEST_DELAY_MS`, default 400ms) to stay well clear
+of rate limits.
+
+Do not use the legacy `*:api` scripts (`fetch:day:api`, `probe:menu:api`) or the
+browser scripts (`discover`, `select:day`, `select:meal`) — they target the old
+site and no longer work.
 
 ## Dry Run Mode
 
@@ -24,6 +35,42 @@ In dry run mode:
 - Stop before any website update.
 
 Clearly tell the user that no selections were applied.
+
+## What The API Gives You
+
+Per option, `output/discovery/day-YYYY-MM-DD.json` now carries:
+
+- `id` — this is the option's `dietCaloriesMealId`, the only id the switch
+  endpoint accepts. Do not use `menuMealId` for writes.
+- `active` — true for the dish currently assigned to that meal.
+- `nutrition` — real macros: `protein`, `calories`, `fat`, `carbohydrate`,
+  `dietaryFiber`, `sugar`, `saturatedFattyAcids`, `weight`.
+- `tags` — the diet line (`VEGE`, `FIT`, `Protein Active`, `Everyday COMFORT`,
+  `No lactose`). A `VEGE` tag is a strong vegetarian/vegan signal.
+- `rating` — always `null`. Ratings no longer exist; never use them as a
+  tie-breaker.
+
+Calories are normalised within a meal slot (~400 kcal breakfast, ~300 second
+breakfast, ~550 lunch), so **protein is the macro that actually differentiates
+options**. When a preference asks for high protein, rank by
+`nutrition.protein` rather than guessing from the dish name.
+
+## Meal Types
+
+The API renames second breakfast to **`2 Śniadanie`** (old UI: `II śniadanie`).
+Mapping lives in `mealTypeIdFromName`. `fetch:day` throws on an unmapped
+switchable meal rather than silently dropping it — if that error appears, add the
+new name to the map instead of ignoring it.
+
+## Modification Windows
+
+`upcoming-deliveries` returns `modificationTimeRemaining` as `DD:HH:MM`. Zero or
+negative means the day is locked and can no longer be changed. A day is treated
+as *configured* when an applied plan for that date exists in
+`output/selections/`; the API has no such flag.
+
+Days lock a couple of days ahead, so run this skill early in the week. Days that
+lock before planning are simply lost.
 
 ## Required Files And Outputs
 
@@ -60,7 +107,7 @@ Update `output/preferences.json` with the weekly preference before fetching and 
    - Run `npm run fetch:day -- YYYY-MM-DD` for each date.
    - These are UI-only browser runs; do not loop unnecessarily.
 4. Classify and choose with subagents:
-   - Use `multi_agent_v1.spawn_agent` because this skill explicitly requires subagent day classification.
+   - Spawn one subagent per day (the Agent tool; this skill requires subagent day classification).
    - Spawn one bounded subagent per day, or at most 3 concurrent subagents for many days.
    - Use `fork_context: false`.
    - Pass only the day menu JSON, relevant preferences JSON, and the required selection-plan format.
@@ -73,6 +120,9 @@ Update `output/preferences.json` with the weekly preference before fetching and 
    - Skip this step entirely if the user requested dry run / plan only.
    - Dry-run first: `npm run apply:selections`
    - After user confirmation, apply all pending files: `npm run apply:selections -- --apply`
+  - Apply re-reads each day's live state first, so a meal that is already correct
+    costs no write. Verify afterwards by re-running `npm run fetch:day` and
+    checking `active` matches the plan — a 2xx on the PUT is not proof.
    - The script scans `output/selections/*.json` and processes files where `status !== "applied"`.
    - Successfully applied files are updated to `status: "applied"` and kept as history.
 
@@ -90,10 +140,18 @@ Inputs:
 - Required output format: <paste selection-format summary>
 
 Task:
-Choose exactly one option for every enabled/changeable meal in the menu. Respect hard exclusions absolutely. Apply always-pick rules when available. Then apply meal-specific preferences, weekly preferences, soft dislikes, ratings, tags, and variety. Return strict JSON only. Each choice must include mealTypeId, mealTypeName, optionId, dishName, and a 1-2 sentence rationale. Do not invent option ids. Do not choose disabled/missing meals.
+Choose exactly one option for every meal in optionsByMeal. Respect hard exclusions absolutely. Apply always-pick rules when available. Then apply meal-specific preferences, weekly preferences, soft dislikes, tags, nutrition and variety. Return strict JSON only. Each choice must include mealTypeId, mealTypeName, optionId, dishName, and a 1-2 sentence rationale. Do not invent option ids. Use the option's `id` field as optionId.
+
+Data notes to include in every prompt:
+- Second breakfast is named "2 Śniadanie" (mealTypeId 2).
+- `rating` is always null; do NOT use it. Rank on `nutrition.protein` and `tags`.
+- Calories are normalised per slot, so protein is the differentiating macro.
+- `tags` carries the diet line; a "VEGE" tag is a strong vegetarian/vegan signal.
+- `active: true` marks the dish currently assigned.
+- Blended drinks (smoothie/shake/koktajl) are a hard exclusion; "pomidorki koktajlowe" means cherry tomatoes and is NOT a blended drink.
 ```
 
-When the subagent returns, validate that every selected `optionId` exists under the same `mealTypeId` in the day menu before writing the file.
+When the subagent returns, validate that every selected `optionId` exists under the same `mealTypeId` in the day menu before writing the file. Compare dish names with whitespace normalised — the data contains zero-width spaces.
 
 ## Selection Judgment
 
@@ -104,7 +162,7 @@ Rules in order:
 3. Apply meal-specific rules.
 4. Apply weekly temporary preferences.
 5. Apply stable positive preferences and soft dislikes.
-6. Use rating/tags as tie-breakers.
+6. Use `nutrition.protein` and `tags` as tie-breakers (ratings no longer exist).
 7. Prefer variety across the day when preferences do not clearly decide.
 
 If all options for a meal look bad, choose the least-bad non-excluded option and explain briefly.

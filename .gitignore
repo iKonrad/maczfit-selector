@@ -4,3 +4,4 @@ output/*
 node_modules/
 .playwright-cli/
 !data/preferences.example.json
+.claude/settings.local.json
