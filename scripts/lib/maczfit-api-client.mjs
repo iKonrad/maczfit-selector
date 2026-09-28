@@ -1,6 +1,6 @@
 import 'dotenv/config';
 
-export const API_BASE = process.env.MACZFIT_API_BASE || 'https://www.maczfit.pl/api/web/v1';
+export const API_BASE = process.env.MACZFIT_API_BASE || 'https://maczfit.pl/api/web/v1';
 export const REQUEST_DELAY_MS = Number(process.env.MACZFIT_REQUEST_DELAY_MS || 400);
 export const OUTPUT_DIR = process.env.MACZFIT_OUTPUT_DIR || 'output/discovery';
 
