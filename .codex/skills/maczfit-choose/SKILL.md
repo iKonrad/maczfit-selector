@@ -47,8 +47,9 @@ Per option, `output/discovery/day-YYYY-MM-DD.json` now carries:
   `dietaryFiber`, `sugar`, `saturatedFattyAcids`, `weight`.
 - `tags` — the diet line (`VEGE`, `FIT`, `Protein Active`, `Everyday COMFORT`,
   `No lactose`). A `VEGE` tag is a strong vegetarian/vegan signal.
-- `rating` — always `null`. Ratings no longer exist; never use them as a
-  tie-breaker.
+- `rating` — the dish's review score, 0-100, with `ratingCount` reviews behind
+  it. `null` means nobody has reviewed it, not a bad dish. Treat a score as
+  meaningful only when `ratingCount` is reasonably large.
 
 Calories are normalised within a meal slot (~400 kcal breakfast, ~300 second
 breakfast, ~550 lunch), so **protein is the macro that actually differentiates
@@ -61,6 +62,20 @@ The API renames second breakfast to **`2 Śniadanie`** (old UI: `II śniadanie`)
 Mapping lives in `mealTypeIdFromName`. `fetch:day` throws on an unmapped
 switchable meal rather than silently dropping it — if that error appears, add the
 new name to the map instead of ignoring it.
+
+## The Protein Active One-Way Door
+
+A meal whose current dish sits on the **Protein Active** line
+(`dietCaloriesId: 143`) can no longer be switched: every PUT returns
+`490 API_ERROR_490 "Niedozwolona zamiana dla tego posiłku"`, whatever the
+target. This holds even though `upcoming-deliveries` still reports the day as
+modifiable and the meal as `switchable: true`, and the options still report
+`canBeChanged: true` - none of those flags predict it.
+
+Protein Active options are usually the highest-protein choice in their slot, so
+this is a real trade-off: taking one wins protein today and forfeits the ability
+to change that slot later in the week. Prefer a non-143 option when the day is
+far out and may be revised; take the Protein Active dish when the pick is final.
 
 ## Modification Windows
 
@@ -144,7 +159,7 @@ Choose exactly one option for every meal in optionsByMeal. Respect hard exclusio
 
 Data notes to include in every prompt:
 - Second breakfast is named "2 Śniadanie" (mealTypeId 2).
-- `rating` is always null; do NOT use it. Rank on `nutrition.protein` and `tags`.
+- `rating` is a 0-100 review score with `ratingCount` reviews; `null` means unrated, not bad. Use it only as a late tie-breaker and ignore scores with a tiny `ratingCount`.
 - Calories are normalised per slot, so protein is the differentiating macro.
 - `tags` carries the diet line; a "VEGE" tag is a strong vegetarian/vegan signal.
 - `active: true` marks the dish currently assigned.
@@ -162,7 +177,7 @@ Rules in order:
 3. Apply meal-specific rules.
 4. Apply weekly temporary preferences.
 5. Apply stable positive preferences and soft dislikes.
-6. Use `nutrition.protein` and `tags` as tie-breakers (ratings no longer exist).
+6. Use `nutrition.protein` and `tags` as tie-breakers, then `rating` when they are close.
 7. Prefer variety across the day when preferences do not clearly decide.
 
 If all options for a meal look bad, choose the least-bad non-excluded option and explain briefly.

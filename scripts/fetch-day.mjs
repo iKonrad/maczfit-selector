@@ -42,7 +42,11 @@ export function buildDay({ date, deliveryId, menu, optionsByMealId }) {
             active: details.dietCaloriesMealId === currentByMealId.get(meal.deliveryMealId),
             dishName: details.menuMealName,
             tags: [option.dietOptionName, option.mealRecommended ? 'RECOMMENDED' : null].filter(Boolean),
-            rating: option.reviewSummary?.averageRating ?? null,
+            // reviewSummary carries `score` (0-100) and `number` of reviews.
+            // An earlier version read `averageRating`, which does not exist,
+            // so every rating came back null and looked like a dead feature.
+            rating: option.reviewSummary?.score ?? null,
+            ratingCount: option.reviewSummary?.number ?? null,
             // Per-option macros: the API exposes these, so protein-led rules
             // can be numeric instead of guessing from the dish name.
             nutrition: details.nutrition || null,

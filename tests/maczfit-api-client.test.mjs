@@ -39,7 +39,7 @@ const menu = {
 const options = new Map([
   [11, [
     { dietOptionName: 'FIT', reviewSummary: null, menuMealDetails: { dietCaloriesMealId: 473, menuMealId: 291911, menuMealName: 'Obecne', nutrition: { protein: 16.3 }, allergens: ['GLUTEN'] } },
-    { dietOptionName: 'VEGE', mealRecommended: true, menuMealDetails: { dietCaloriesMealId: 293, menuMealId: 291699, menuMealName: 'Inne', nutrition: { protein: 14.9 }, allergens: [] } },
+    { dietOptionName: 'VEGE', mealRecommended: true, reviewSummary: { score: 88, number: 40 }, menuMealDetails: { dietCaloriesMealId: 293, menuMealId: 291699, menuMealName: 'Inne', nutrition: { protein: 14.9 }, allergens: [] } },
   ]],
   [12, [
     { dietOptionName: 'Everyday', menuMealDetails: { dietCaloriesMealId: 415, menuMealId: 292000, menuMealName: 'Deser', nutrition: { protein: 9 }, allergens: [] } },
@@ -59,6 +59,16 @@ test('buildDay uses dietCaloriesMealId as the option id and flags the active dis
   assert.equal(breakfast.options[1].nutrition.protein, 14.9);
   assert.deepEqual(breakfast.options[1].tags, ['VEGE', 'RECOMMENDED']);
   assert.equal(breakfast.options[0].rating, null);
+});
+
+test('buildDay reads ratings from reviewSummary.score, not the nonexistent averageRating', () => {
+  const day = buildDay({ date: '2026-08-26', deliveryId: 7, menu, optionsByMealId: options });
+  const breakfast = day.optionsByMeal[0];
+
+  assert.equal(breakfast.options[1].rating, 88);
+  assert.equal(breakfast.options[1].ratingCount, 40);
+  // An option with no reviews stays null rather than reporting a zero score.
+  assert.equal(breakfast.options[0].ratingCount, null);
 });
 
 test('buildDay refuses to silently drop a switchable meal it cannot map', () => {
